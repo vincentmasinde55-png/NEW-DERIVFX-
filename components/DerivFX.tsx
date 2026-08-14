@@ -1,51 +1,6 @@
 "use client";
 import {useEffect,useMemo,useRef,useState} from "react";
 import {DerivWS} from "../lib/deriv";
-const tabs=["Dashboard","Bot Builder","AI Bots","Quick Bot","Free Bots","Signals","Analysis","Auto Trader","Deriv Course"];
-const tabImages:Record<string,string>={"Dashboard":"/tab-images/dashboard.svg","Bot Builder":"/tab-images/bot-builder.svg","AI Bots":"/tab-images/ai-bots.svg","Quick Bot":"/tab-images/quick-bot.svg","Free Bots":"/tab-images/free-bots.svg","Signals":"/tab-images/signals.svg","Analysis":"/tab-images/analysis.svg","Auto Trader":"/tab-images/auto-trader.svg","Deriv Course":"/tab-images/course.svg"};
-const indices=[["Volatility 10","R_10"],["Volatility 25","R_25"],["Volatility 50","R_50"],["Volatility 75","R_75"],["Volatility 100","R_100"],["Volatility 10 (1s)","1HZ10V"],["Volatility 25 (1s)","1HZ25V"],["Volatility 50 (1s)","1HZ50V"],["Volatility 75 (1s)","1HZ75V"],["Volatility 100 (1s)","1HZ100V"]];
 
-type AccountMode="Demo"|"Real";
-export default function DerivFX(){
- const [loading,setLoading]=useState(true),[authLoading,setAuthLoading]=useState(false),[tab,setTab]=useState("Dashboard"),[running,setRunning]=useState(false),[paused,setPaused]=useState(false),[speed,setSpeed]=useState<"FAST"|"SLOW">("FAST"),[open,setOpen]=useState(false),[menu,setMenu]=useState(false);
- const [scanner,setScanner]=useState(true),[pos,setPos]=useState<any[]>([]),[balance,setBalance]=useState<number|null>(null),[account,setAccount]=useState<AccountMode>("Demo"),[connected,setConnected]=useState(false),[authenticated,setAuthenticated]=useState(false),[tick,setTick]=useState("99.6002"),[drag,setDrag]=useState({x:20,y:120});
- const ws=useRef<DerivWS|null>(null);
- const login=(mode:"login"|"signup"="login")=>{setAuthLoading(true);location.href=mode==="signup"?"/api/auth/login?mode=signup":"/api/auth/login"};
- const connectAccount=async(mode:AccountMode)=>{
-   try{
-     setConnected(false);setBalance(null);ws.current?.close();
-     const accountsRes=await fetch("/api/deriv/accounts",{cache:"no-store"}); const accountsJson=await accountsRes.json();
-     const accounts=(accountsJson.data||accountsJson.accounts||[]) as any[];
-     const wanted=mode==="Demo"?accounts.find(a=>String(a.account_type||"").toLowerCase()==="demo"):accounts.find(a=>String(a.account_type||"").toLowerCase()==="real");
-     const preferred=wanted||accounts[0];
-     if(!preferred?.account_id)throw new Error("No Deriv account returned");
-     const otpRes=await fetch("/api/deriv/otp",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({accountId:preferred.account_id}),cache:"no-store"});
-     const otp=await otpRes.json(); const wsUrl=otp.data?.url;
-     if(!wsUrl)throw new Error(otp.errors?.[0]?.message||"Unable to obtain authenticated WebSocket URL");
-     const d=new DerivWS();ws.current=d;await d.connect(wsUrl);setConnected(true);setAccount(mode);
-     d.balance(m=>{const b=(m as any).balance?.balance;if(typeof b==="number")setBalance(b)});
-     d.portfolio(m=>setPos(((m as any).portfolio?.contracts)||[]));
-     d.ticks("R_50",m=>{const q=(m as any).tick?.quote;if(q!=null)setTick(Number(q).toFixed(4))});
-   }catch(e){console.error(e);setConnected(false)}
- };
- useEffect(()=>{setDrag({x:Math.max(5,window.innerWidth-95),y:Math.max(90,window.innerHeight-260)});(async()=>{try{const r=await fetch("/api/auth/session",{cache:"no-store"});const s=await r.json();setAuthenticated(!!s.authenticated);if(s.authenticated)await connectAccount("Demo");}finally{setLoading(false)}})();return()=>ws.current?.close()},[]);
- const toggleAccount=()=>{if(!authenticated){login();return}connectAccount(account==="Demo"?"Real":"Demo")};
- const toggleRun=()=>{if(!authenticated){login();return}if(!running){setRunning(true);setPaused(false)}else setPaused(p=>!p)};
- const stop=()=>{setRunning(false);setPaused(false)};const price=useMemo(()=>Number(tick),[tick]);
- if(loading)return <div className="loaderScreen"><div className="loaderLogo"><span>Deriv</span><b>FX</b></div><div className="loaderSpinner"/><p>Connecting to DerivFX…</p><small>Preparing your trading workspace</small></div>;
- return <main className="app">
- <header className="top"><button className="icon menuBtn" onClick={()=>setMenu(!menu)}>☰</button><div className="brand"><span>Deriv</span><b>FX</b></div><div className="topSpacer"/>
-   {authenticated&&<button className="accountPill" onClick={toggleAccount}>{account==="Demo"?"● Demo":"● Real"} ▾</button>}<button className="currency">USD ▾</button><div className="balance">{authenticated?(balance==null?"0.00":balance.toFixed(2)):"—"} USD</div>
-   {!authenticated?<><button className="login" onClick={()=>login("login")}>Log in</button><button className="signup" onClick={()=>login("signup")}>Sign up</button></>:<span className={connected?"liveDot":"offlineDot"}>● {connected?"LIVE":"OFFLINE"}</span>}
- </header>
- {menu&&<aside className="drawer"><button onClick={()=>setMenu(false)}>×</button><h2>DerivFX</h2>{!authenticated&&<><button className="drawerAuth" onClick={()=>login("login")}>Log in to Deriv</button><button className="drawerSignup" onClick={()=>login("signup")}>Create Deriv account</button></>}<p>Account: {authenticated?account:"Not connected"}</p><p>Trading History</p><p>Settings</p><label>Language <select><option>English</option><option>Swahili</option></select></label><h3>Social</h3><p>Telegram</p><p>YouTube</p><p>WhatsApp</p><p>X / Twitter</p></aside>}
- <nav className="tabs">{tabs.map(t=><button className={tab===t?"active":""} key={t} onClick={()=>setTab(t)}><span className="tabIcon">◆</span>{t}</button>)}</nav>
- <section className="hero"><div className="heroGlow"/><div className="tabVisual"><img src={tabImages[tab]} alt=""/></div><div className="heroContent"><p className="eyebrow">DERIV AUTOMATION</p><h1>{tab==="Dashboard"?"Automate your trades with confidence.":tab}</h1><p className="subtitle">Build, monitor and control your Deriv strategies in one place.</p>{!authenticated&&<div className="heroAuth"><button onClick={()=>login("login")}>Log in to Deriv</button><button onClick={()=>login("signup")}>Sign up</button></div>}</div><div className="cards"><button onClick={()=>setTab("Bot Builder")}>📁 <strong>Load Bot</strong><small>Import a strategy</small> →</button><button onClick={()=>setTab("Quick Bot")}>🚀 <strong>Quick Bot</strong><small>Build fast</small> →</button><button onClick={()=>setTab("Free Bots")}>♛ <strong>Free Bots</strong><small>Ready-made bots</small> →</button></div></section>
- {tab==="Bot Builder"&&<section className="builder"><h2>1. Trade Parameters</h2><div className="grid"><label>Market<select><option>Derived</option></select></label><label>Index<select><option>Volatility 50 Index</option><option>Volatility 100 Index</option><option>Volatility 75 Index</option></select></label><label>Trade Type<select><option>Digits</option><option>Rise/Fall</option></select></label><label>Contract<select><option>Even</option><option>Odd</option><option>Over</option><option>Under</option></select></label><label>Duration<select><option>Ticks</option></select></label><label>Duration<input value="1" readOnly/></label><label>Stake<input value="1 USD" readOnly/></label></div><h2>2. Strategy & Risk</h2><div className="grid"><label>Strategy<select><option>Fixed stake</option><option>Martingale</option></select></label><label>Stake multiplier<input value="x2" readOnly/></label><label>Max stake<input value="50 USD" readOnly/></label><label>Profit threshold<input value="10 USD" readOnly/></label><label>Loss threshold<input value="500 USD" readOnly/></label></div></section>}
- {tab==="Signals"&&<section className="signals">{indices.map(([name,symbol])=><div className="signal" key={symbol}><div><b>{name}</b><small>{symbol}</small></div><strong>{name==="Volatility 50"?tick:"—"}</strong><span>EVEN <em>LIVE</em></span></div>)}</section>}
- {tab!=="Bot Builder"&&tab!=="Signals"&&<section className="dashboard"><div className="stat"><small>Account</small><b>{authenticated?account:"Not connected"}</b><strong>{balance==null?"—":balance.toFixed(2)+" USD"}</strong></div><div className="stat"><small>Live Tick</small><b>Volatility 50</b><strong>{price.toFixed(4)}</strong></div><div className="stat"><small>Connection</small><b>{connected?"WebSocket connected":"Not connected"}</b><strong>{connected?"LIVE":"OFFLINE"}</strong></div></section>}
- {scanner&&<div className="scanner" style={{left:drag.x,top:drag.y}} onPointerDown={e=>{const sx=e.clientX-drag.x,sy=e.clientY-drag.y;const move=(ev:PointerEvent)=>setDrag({x:Math.max(5,Math.min(window.innerWidth-95,ev.clientX-sx)),y:Math.max(65,Math.min(window.innerHeight-100,ev.clientY-sy))});const up=()=>{window.removeEventListener("pointermove",move);window.removeEventListener("pointerup",up)};window.addEventListener("pointermove",move);window.addEventListener("pointerup",up)}}><button onClick={()=>setScanner(false)}>×</button><b>AI</b><small>Scanner</small><span>●</span></div>}
- <section className="execution">{open&&<div className="transactions"><div className="txHead"><b>Open Transactions ({pos.length})</b><button onClick={()=>setOpen(false)}>⌄</button></div>{pos.length?pos.map((p:any,i:number)=><div className="tx" key={i}><div><b>{p.underlying_symbol||p.symbol||"Volatility Index"}</b><small>{p.contract_type||"Contract"} • {p.duration||1} tick</small></div><strong>{typeof p.profit==="number"?(p.profit>=0?"+":"")+p.profit.toFixed(2)+" USD":"Open"}</strong></div>):<div className="empty">No open transactions</div>}</div>}<div className="execRow"><button className={"run "+(running?"running":"")} onClick={toggleRun}>{!running?"▶ Run":paused?"▶ Resume":"Ⅱ Pause"}</button><button className="speed" onClick={()=>setSpeed(speed==="FAST"?"SLOW":"FAST")}>Execution <b>{speed}</b></button>{!running&&<button className="openBtn" onClick={()=>setOpen(!open)}>Open Transactions {pos.length} {open?"⌄":"⌃"}</button>}{running&&<button className="stop" onClick={stop}>■ Stop</button>}</div>{running&&<div className="runStatus">{paused?"Bot paused":"Bot running"}<span>{speed}</span></div>}</section>
- {authLoading&&<div className="authOverlay"><div className="loaderSpinner"/><b>Connecting to Deriv…</b></div>}
- </main>
-}
+const tabs=["Dashboard","Bot Builder","AI Bots","Quick Bot","Free Bots","Signals","Analysis","Auto Trader","Deriv Course"];
+const tabImages:Record<string,string>={"Dashboard":"/tab-images/dashboard.svg","Bot Builder":"/tab-images/bot-builder.svg","AI Bots":"/tab-images/ai-bots.svg","Quick Bot":"/tab-images/quick-bot.svg","Free Bots":"/tab-images/free-bots.svg","Signals":"/tab-images
