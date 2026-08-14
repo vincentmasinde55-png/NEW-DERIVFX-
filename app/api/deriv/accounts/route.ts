@@ -1,0 +1,2 @@
+import {NextRequest,NextResponse} from "next/server";
+export async function GET(req:NextRequest){const token=req.cookies.get("deriv_access_token")?.value;if(!token)return NextResponse.json({error:"Not authenticated"},{status:401});const r=await fetch("https://api.derivws.com/trading/v1/options/accounts",{headers:{Authorization:`Bearer ${token}`,"Deriv-App-ID":process.env.DERIV_APP_ID||""},cache:"no-store"});return NextResponse.json(await r.json(),{status:r.status})}
